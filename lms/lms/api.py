@@ -2402,3 +2402,133 @@ def export_course_as_zip(course_name: str):
 def import_course_from_zip(zip_file_path: str):
 	frappe.only_for(["Moderator", "Course Creator"])
 	return import_course_zip(zip_file_path)
+
+
+@frappe.whitelist()
+def bulk_upload_quiz_questions(quiz: str, filedata: str):
+	"""Bulk upload MCQ questions to a quiz from a CSV payload.
+
+	``filedata`` is the raw text content of a CSV file whose first row must be
+	the header row:
+	  question,type,marks,option_1,is_correct_1,explanation_1,
+	  option_2,is_correct_2,explanation_2,
+	  option_3,is_correct_3,explanation_3,
+	  option_4,is_correct_4,explanation_4
+
+	Returns a dict with keys ``inserted`` (int) and ``errors`` (list of dicts
+	with ``row`` and ``message`` keys).
+	"""
+	import csv
+	import io
+
+	frappe.only_for(["Moderator", "Course Creator"])
+
+	if not frappe.db.exists("LMS Quiz", quiz):
+		frappe.throw(_("Quiz {0} does not exist.").format(quiz))
+
+	REQUIRED_HEADERS = {
+		"question",
+		"type",
+		"marks",
+		"option_1",
+		"is_correct_1",
+		"option_2",
+		"is_correct_2",
+	}
+
+	VALID_TYPES = {"Choices", "User Input", "Open Ended"}
+
+	try:
+		reader = csv.DictReader(io.StringIO(filedata))
+	except Exception as e:
+		frappe.throw(_("Could not parse CSV: {0}").format(str(e)))
+
+	headers = set(reader.fieldnames or [])
+	missing = REQUIRED_HEADERS - headers
+	if missing:
+		frappe.throw(
+			_("CSV is missing required columns: {0}").format(", ".join(sorted(missing)))
+		)
+
+	inserted = 0
+	errors = []
+
+	for idx, row in enumerate(reader, start=2):  # row 1 is the header
+		row_num = idx
+		question_text = (row.get("question") or "").strip()
+		question_type = (row.get("type") or "Choices").strip()
+		marks_raw = (row.get("marks") or "1").strip()
+
+		# --- validation ---
+		if not question_text:
+			errors.append({"row": row_num, "message": _("Question text is empty.")})
+			continue
+
+		if question_type not in VALID_TYPES:
+			errors.append(
+				{
+					"row": row_num,
+					"message": _("Invalid type '{0}'. Must be one of: {1}.").format(
+						question_type, ", ".join(VALID_TYPES)
+					),
+				}
+			)
+			continue
+
+		try:
+			marks = int(marks_raw)
+			if marks < 0:
+				raise ValueError
+		except (ValueError, TypeError):
+			errors.append(
+				{"row": row_num, "message": _("Marks must be a non-negative integer (got '{0}').").format(marks_raw)}
+			)
+			continue
+
+		# --- build question doc ---
+		question_doc = frappe.new_doc("LMS Question")
+		question_doc.question = question_text
+		question_doc.type = question_type
+
+		for n in range(1, 5):
+			option_val = (row.get(f"option_{n}") or "").strip()
+			explanation_val = (row.get(f"explanation_{n}") or "").strip()
+			is_correct_raw = (row.get(f"is_correct_{n}") or "0").strip()
+			is_correct = 1 if is_correct_raw in ("1", "true", "yes", "True", "Yes") else 0
+
+			question_doc.set(f"option_{n}", option_val)
+			question_doc.set(f"explanation_{n}", explanation_val)
+			question_doc.set(f"is_correct_{n}", is_correct)
+
+		# For User Input type, map possibility columns
+		for n in range(1, 5):
+			possibility_val = (row.get(f"possibility_{n}") or "").strip()
+			question_doc.set(f"possibility_{n}", possibility_val)
+
+		try:
+			question_doc.insert()
+		except Exception as e:
+			errors.append({"row": row_num, "message": _("Failed to create question: {0}").format(str(e))})
+			continue
+
+		# --- append to quiz ---
+		try:
+			quiz_question = frappe.new_doc("LMS Quiz Question")
+			quiz_question.update(
+				{
+					"question": question_doc.name,
+					"marks": marks,
+					"parent": quiz,
+					"parentfield": "questions",
+					"parenttype": "LMS Quiz",
+				}
+			)
+			quiz_question.insert()
+			inserted += 1
+		except Exception as e:
+			errors.append(
+				{"row": row_num, "message": _("Question created but could not be added to quiz: {0}").format(str(e))}
+			)
+
+	return {"inserted": inserted, "errors": errors}
+

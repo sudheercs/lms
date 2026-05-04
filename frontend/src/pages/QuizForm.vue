@@ -138,12 +138,20 @@
 				<div class="text-lg font-semibold text-ink-gray-9">
 					{{ __('Questions') }}
 				</div>
-				<Button v-if="!readOnlyMode" @click="openQuestionModal()">
-					<template #prefix>
-						<Plus class="w-4 h-4" />
-					</template>
-					{{ __('New Question') }}
-				</Button>
+				<div v-if="!readOnlyMode" class="flex items-center gap-x-2">
+					<Button variant="outline" @click="showBulkUploadModal = true">
+						<template #prefix>
+							<Upload class="w-4 h-4" />
+						</template>
+						{{ __('Upload CSV') }}
+					</Button>
+					<Button @click="openQuestionModal()">
+						<template #prefix>
+							<Plus class="w-4 h-4" />
+						</template>
+						{{ __('New Question') }}
+					</Button>
+				</div>
 			</div>
 			<ListView
 				v-if="questions.length"
@@ -204,6 +212,12 @@
 		v-model:quiz="quizDetails"
 		:title="currentQuestion.question ? __('Edit Question') : __('Add Question')"
 	/>
+
+	<BulkUploadQuestions
+		v-model="showBulkUploadModal"
+		:quizID="props.quizID"
+		@success="quizDetails.reload()"
+	/>
 </template>
 <script setup>
 import {
@@ -233,13 +247,15 @@ import {
 	onBeforeUnmount,
 } from 'vue'
 import { sessionStore } from '../stores/session'
-import { ClipboardList, ListChecks, Plus, Trash2 } from 'lucide-vue-next'
+import { ClipboardList, ListChecks, Plus, Trash2, Upload } from 'lucide-vue-next'
 import { useRouter } from 'vue-router'
 import { sanitizeHTML } from '@/utils'
 import Question from '@/components/Modals/Question.vue'
+import BulkUploadQuestions from '@/components/Modals/BulkUploadQuestions.vue'
 
 const { brand } = sessionStore()
 const showQuestionModal = ref(false)
+const showBulkUploadModal = ref(false)
 const currentQuestion = reactive({
 	question: '',
 	marks: 0,
