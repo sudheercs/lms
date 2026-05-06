@@ -1,439 +1,141 @@
 <template>
-	<div v-if="quiz.data">
-		<div
-			class="bg-surface-blue-2 text-ink-blue-3 space-y-2 p-3 mb-4 rounded-lg leading-5"
-		>
-			<div class="font-medium">
-				{{
-					__(
-						'Please read the following instructions carefully before starting the quiz'
-					)
-				}}
-			</div>
-			<ol class="list-decimal list-inside space-y-2">
-				<li v-if="inVideo">
-					{{ __('You will have to complete the quiz to continue the video') }}
-				</li>
-				<li>
-					{{
-						__(
-							'Do not refresh the page or close this window. If you do, the quiz will be submitted automatically.'
-						)
-					}}
-				</li>
-				<li>
-					{{
-						__('This quiz consists of {0} questions.').format(questions.length)
-					}}
-				</li>
-				<li v-if="quiz.data?.duration">
-					{{
-						__(
-							'Please ensure that you complete all the questions in {0} minutes.'
-						).format(quiz.data.duration)
-					}}
-				</li>
-				<li v-if="quiz.data?.duration">
-					{{
-						__(
-							'If you fail to do so, the quiz will be automatically submitted when the timer ends.'
-						)
-					}}
-				</li>
-				<li v-if="quiz.data.passing_percentage">
-					{{
-						__(
-							'You will have to get {0}% correct answers in order to pass the quiz.'
-						).format(quiz.data.passing_percentage)
-					}}
-				</li>
-				<li v-if="quiz.data.max_attempts">
-					{{
-						__('You can attempt this quiz {0}.').format(
-							quiz.data.max_attempts == 1
-								? '1 time'
-								: `${quiz.data.max_attempts} times`
-						)
-					}}
-				</li>
-				<li v-if="quiz.data.enable_negative_marking">
-					{{
-						__(
-							'If you answer incorrectly, {0} {1} will be deducted from your score for each incorrect answer.'
-						).format(
-							quiz.data.marks_to_cut,
-							quiz.data.marks_to_cut == 1 ? 'mark' : 'marks'
-						)
-					}}
-				</li>
-			</ol>
+	<!-- Pre-quiz start screen -->
+	<div v-if="quiz.data && activeQuestion === 0" class="max-w-2xl mx-auto my-10 border rounded-lg p-8 text-center space-y-4">
+		<div class="text-xl font-bold text-gray-900">{{ quiz.data.title }}</div>
+		<ul class="text-sm text-left text-gray-700 bg-blue-50 rounded-lg p-4 space-y-1 list-decimal list-inside">
+			<li>{{ __('Do not refresh the page or close this window.') }}</li>
+			<li>{{ __('This quiz consists of {0} questions.').format(questions.length) }}</li>
+			<li v-if="quiz.data?.duration">{{ __('Complete all questions in {0} minutes.').format(quiz.data.duration) }}</li>
+			<li v-if="quiz.data?.passing_percentage">{{ __('You need {0}% to pass.').format(quiz.data.passing_percentage) }}</li>
+			<li v-if="quiz.data?.max_attempts">{{ __('Maximum attempts: {0}').format(quiz.data.max_attempts) }}</li>
+			<li v-if="quiz.data?.enable_negative_marking">{{ __('Negative marking: {0} mark(s) deducted per wrong answer.').format(quiz.data.marks_to_cut) }}</li>
+		</ul>
+		<div v-if="quiz.data.max_attempts && attempts.data?.length >= quiz.data.max_attempts" class="text-red-600 text-sm">
+			{{ __('You have exceeded the maximum number of attempts for this quiz.') }}
 		</div>
-
-		<div v-if="quiz.data.duration" class="flex flex-col gap-x-1 my-4 px-2">
-			<div class="mb-2">
-				<span class="text-ink-gray-9"> {{ __('Time') }}: </span>
-				<span class="font-semibold text-ink-gray-9">
-					{{ formatTimer(timer) }}
-				</span>
-			</div>
-			<ProgressBar :progress="timerProgress" />
-		</div>
-
-		<div v-if="activeQuestion == 0">
-			<div class="border text-center p-20 rounded-md">
-				<div class="font-semibold text-lg text-ink-gray-9">
-					{{ quiz.data.title }}
-				</div>
-				<div class="flex items-center justify-center gap-x-2 mt-4">
-					<Button
-						v-if="
-							!quiz.data.max_attempts ||
-							attempts.data?.length < quiz.data.max_attempts
-						"
-						variant="solid"
-						@click="startQuiz"
-					>
-						<span>
-							{{ inVideo ? __('Start the Quiz') : __('Start') }}
-						</span>
-					</Button>
-					<Button v-if="inVideo" @click="props.backToVideo()">
-						{{ __('Resume Video') }}
-					</Button>
-				</div>
-				<div
-					v-if="
-						quiz.data.max_attempts &&
-						attempts.data?.length >= quiz.data.max_attempts
-					"
-					class="leading-5 text-ink-gray-7"
-				>
-					{{
-						__(
-							'You have already exceeded the maximum number of attempts allowed for this quiz.'
-						)
-					}}
-				</div>
-			</div>
-		</div>
-		<div v-else-if="!quizSubmission.data">
-			<div v-for="(question, qtidx) in questions">
-				<div
-					v-if="qtidx == activeQuestion - 1 && questionDetails.data"
-					class="border rounded-lg p-5"
-				>
-					<div class="flex justify-between">
-						<div class="text-sm text-ink-gray-5">
-							{{ __('Question {0}').format(activeQuestion) }} -
-							{{ getInstructions(questionDetails.data) }}
-						</div>
-						<div class="text-ink-gray-9 text-sm font-semibold item-left">
-							{{ question.marks }}
-							{{ question.marks == 1 ? __('Mark') : __('Marks') }}
-						</div>
-					</div>
-					<div
-						class="text-ink-gray-9 font-semibold mt-2 leading-5"
-						v-html="questionDetails.data.question"
-					></div>
-					<div v-if="questionDetails.data.type == 'Choices'" v-for="index in 4">
-						<label
-							v-if="questionDetails.data[`option_${index}`]"
-							class="flex items-center bg-surface-gray-3 rounded-md p-3 mt-4 w-full cursor-pointer focus:border-blue-600"
-						>
-							<input
-								v-if="!showAnswers.length && !questionDetails.data.multiple"
-								type="radio"
-								:name="encodeURIComponent(questionDetails.data.question)"
-								class="w-3.5 h-3.5 text-ink-gray-9 focus:ring-outline-gray-modals"
-								@change="markAnswer(index)"
-								:checked="selectedOptions[index - 1]"
-							/>
-
-							<input
-								v-else-if="!showAnswers.length && questionDetails.data.multiple"
-								type="checkbox"
-								:name="encodeURIComponent(questionDetails.data.question)"
-								class="w-3.5 h-3.5 text-ink-gray-9 rounded-sm focus:ring-outline-gray-modals"
-								@change="markAnswer(index)"
-								:checked="selectedOptions[index - 1]"
-							/>
-							<div
-								v-else-if="quiz.data.show_answers"
-								v-for="(answer, idx) in showAnswers"
-							>
-								<div v-if="index - 1 == idx">
-									<CheckCircle
-										v-if="answer == 1"
-										class="w-4 h-4 text-ink-green-2"
-									/>
-									<MinusCircle
-										v-else-if="answer == 2"
-										class="w-4 h-4 text-ink-green-2"
-									/>
-									<XCircle
-										v-else-if="answer == 0"
-										class="w-4 h-4 text-ink-red-3"
-									/>
-									<MinusCircle v-else class="w-4 h-4" />
-								</div>
-							</div>
-							<span
-								class="ms-2 text-ink-gray-9"
-								v-html="questionDetails.data[`option_${index}`]"
-							>
-							</span>
-						</label>
-						<div
-							v-if="questionDetails.data[`explanation_${index}`]"
-							class="mt-2 text-xs text-ink-gray-7"
-							v-show="showAnswers.length"
-						>
-							{{ questionDetails.data[`explanation_${index}`] }}
-						</div>
-					</div>
-					<div v-else-if="questionDetails.data.type == 'User Input'">
-						<FormControl
-							v-model="possibleAnswer"
-							type="textarea"
-							:disabled="showAnswers.length ? true : false"
-							class="my-2"
-						/>
-						<div v-if="showAnswers.length">
-							<Badge v-if="showAnswers[0]" :label="__('Correct')" theme="green">
-								<template #prefix>
-									<CheckCircle class="w-4 h-4 text-ink-green-2 me-1" />
-								</template>
-							</Badge>
-							<Badge v-else theme="red" :label="__('Incorrect')">
-								<template #prefix>
-									<XCircle class="w-4 h-4 text-ink-red-3 me-1" />
-								</template>
-							</Badge>
-						</div>
-					</div>
-					<div v-else>
-						<TextEditor
-							class="mt-4"
-							:content="possibleAnswer"
-							@change="(val) => (possibleAnswer = val)"
-							:editable="true"
-							:fixedMenu="true"
-							editorClass="prose-sm max-w-none border-b border-x border-outline-gray-modals bg-surface-gray-2 rounded-b-md py-1 px-2 min-h-[7rem]"
-						/>
-					</div>
-					<div class="flex items-center justify-between mt-8">
-						<Checkbox
-							v-if="!quiz.data.show_answers"
-							:label="__('Mark for review')"
-							:model-value="reviewQuestions.includes(activeQuestion) ? 1 : 0"
-							@change="markForReview($event, activeQuestion)"
-						/>
-						<div
-							v-if="!quiz.data.show_answers"
-							class="flex items-center gap-x-2"
-						>
-							<Button
-								@click="switchQuestion(activeQuestion - 1)"
-								:disabled="activeQuestion == 1"
-								class="rounded-full"
-							>
-								<template #icon>
-									<ChevronLeft class="size-4 stroke-1.5" />
-								</template>
-							</Button>
-							<span
-								v-for="item in paginationWindow"
-								:key="item"
-								class="w-6 h-6 rounded-full flex items-center justify-center text-sm"
-								:class="{
-									'cursor-pointer': item !== '...',
-									'bg-surface-gray-4 border border-outline-gray-5 font-medium':
-										activeQuestion == item,
-									'text-ink-gray-5': item === '...',
-									'bg-surface-blue-3 text-ink-white':
-										attemptedQuestions.includes(item) && activeQuestion != item,
-									'bg-surface-gray-3 text-ink-gray-6':
-										activeQuestion != item &&
-										item !== '...' &&
-										!attemptedQuestions.includes(item),
-								}"
-								@click="item !== '...' && switchQuestion(item)"
-							>
-								{{ item }}
-							</span>
-
-							<Button
-								@click="switchQuestion(activeQuestion + 1)"
-								:disabled="activeQuestion == questions.length"
-								class="rounded-full"
-							>
-								<template #icon>
-									<ChevronRight class="size-4 stroke-1.5" />
-								</template>
-							</Button>
-						</div>
-						<Button
-							v-if="
-								quiz.data.show_answers &&
-								!showAnswers.length &&
-								questionDetails.data.type != 'Open Ended'
-							"
-							class="ms-auto"
-							@click="checkAnswer()"
-						>
-							<span>
-								{{ __('Check') }}
-							</span>
-						</Button>
-						<Button
-							v-else-if="
-								activeQuestion != questions.length && quiz.data.show_answers
-							"
-							@click="nextQuestion()"
-							class="ms-auto"
-						>
-							<span>
-								{{ __('Next') }}
-							</span>
-						</Button>
-						<Button
-							variant="solid"
-							v-else
-							@click="handleSubmitClick()"
-							class="ms-auto"
-						>
-							<span>
-								{{ __('Submit') }}
-							</span>
-						</Button>
-					</div>
-				</div>
-			</div>
-			<div v-if="reviewQuestions.length" class="border rounded-lg p-4 mt-4">
-				<div class="font-semibold">
-					{{ __('Questions marked for review') }}
-				</div>
-				<div class="flex items-center gap-x-2 mt-2">
-					<div
-						v-for="index in reviewQuestions"
-						@click="switchQuestion(index)"
-						class="w-6 h-6 rounded-full flex items-center justify-center text-sm cursor-pointer bg-surface-gray-3"
-					>
-						{{ index }}
-					</div>
-				</div>
-			</div>
-		</div>
-		<div v-else class="border rounded-lg p-20 text-center space-y-2">
-			<div class="text-lg font-semibold text-ink-gray-9">
-				{{ __('Quiz Summary') }}
-			</div>
-			<div
-				v-if="quizSubmission.data.is_open_ended"
-				class="leading-5 text-ink-gray-7"
-			>
-				{{
-					__(
-						"Your submission has been successfully saved. The instructor will review and grade it shortly, and you'll be notified of your final result."
-					)
-				}}
-			</div>
-			<div v-else class="text-ink-gray-7">
-				{{
-					__(
-						'You got {0}% correct answers with a score of {1} out of {2}'
-					).format(
-						Math.ceil(quizSubmission.data.percentage),
-						quizSubmission.data.score,
-						quizSubmission.data.score_out_of
-					)
-				}}
-			</div>
-			<div class="flex gap-x-2">
-				<Button
-					@click="resetQuiz()"
-					class="mt-2"
-					v-if="
-						!quiz.data.max_attempts ||
-						attempts?.data.length < quiz.data.max_attempts
-					"
-				>
-					<span>
-						{{ __('Try Again') }}
-					</span>
-				</Button>
-				<Button v-if="inVideo" @click="props.backToVideo()">
-					{{ __('Resume Video') }}
-				</Button>
-			</div>
-		</div>
-		<div
-			v-if="
-				quiz.data.show_submission_history &&
-				attempts?.data &&
-				attempts.data.length > 0
-			"
-			class="mt-10"
-		>
-			<ListView
-				:columns="getSubmissionColumns()"
-				:rows="attempts?.data"
-				row-key="name"
-				:options="{
-					selectable: false,
-					showTooltip: false,
-					emptyState: { title: __('No Quiz submissions found') },
-				}"
-			>
-			</ListView>
+		<div v-else class="flex justify-center gap-3">
+			<Button variant="solid" @click="startQuiz">{{ inVideo ? __('Start the Quiz') : __('Start') }}</Button>
+			<Button v-if="inVideo" @click="props.backToVideo()">{{ __('Resume Video') }}</Button>
 		</div>
 	</div>
-	<Dialog
-		v-model="showSubmissionConfirmation"
-		:options="{
-			title: __('Are you sure you want to submit the quiz?'),
-			actions: [
-				{
-					size: 'sm',
-					label: __('Submit'),
-					variant: 'solid',
-					onClick() {
-						submitQuiz()
-						showSubmissionConfirmation = false
-					},
-				},
-			],
-		}"
-	>
-		<template #body-content>
-			<div class="border border-outline-gray-modals rounded-lg text-base">
-				<div class="divide-y divide-outline-gray-modals">
-					<div class="grid grid-cols-2 divide-x divide-outline-gray-modals">
-						<div class="p-2">
-							{{ __('Total Questions') }}
-						</div>
-						<div class="p-2">
-							{{ questions.length }}
-						</div>
-					</div>
-					<div class="grid grid-cols-2 divide-x divide-outline-gray-modals">
-						<div class="p-2">
-							{{ __('Attempted Questions') }}
-						</div>
-						<div class="p-2">
-							{{ attemptedQuestions.length }}
-						</div>
-					</div>
-					<div class="grid grid-cols-2 divide-x divide-outline-gray-modals">
-						<div class="p-2">
-							{{ __('Unattempted Questions') }}
-						</div>
-						<div class="p-2">
-							{{ questions.length - attemptedQuestions.length }}
+
+	<!-- Active NTA-style quiz -->
+	<div v-else-if="quiz.data && !quizSubmission.data && activeQuestion > 0" class="flex flex-col" style="height:calc(100vh - 53px)">
+		<!-- Header -->
+		<div class="flex items-center justify-between bg-white border-b px-4 py-2 shadow-sm flex-shrink-0">
+			<div class="flex items-center gap-3">
+				<div class="w-14 h-14 bg-gray-200 border-2 border-gray-400 rounded flex items-center justify-center">
+					<svg class="w-8 h-8 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+				</div>
+				<div class="text-sm leading-6">
+					<div>Candidate Name : <span class="text-orange-500 font-semibold">{{ user.data?.full_name }}</span></div>
+					<div>Exam Name : <span class="text-green-700 font-semibold">{{ quiz.data?.title }}</span></div>
+					<div v-if="quiz.data?.duration">Remaining Time : <span class="bg-blue-600 text-white px-2 py-0.5 rounded font-mono text-xs ml-1">{{ formatTimer(timer) }}</span></div>
+				</div>
+			</div>
+			<select class="border border-gray-300 rounded px-3 py-1.5 text-sm bg-white"><option>English</option></select>
+		</div>
+
+		<!-- Body -->
+		<div class="flex flex-1 overflow-hidden">
+			<!-- Left: Question panel -->
+			<div class="flex-1 flex flex-col overflow-hidden bg-white">
+				<div class="flex-1 overflow-y-auto p-6">
+					<div v-for="(question, idx) in questions" :key="idx">
+						<div v-if="idx === activeQuestion - 1 && questionDetails.data">
+							<div class="flex items-center justify-between mb-4">
+								<h2 class="text-base font-bold text-gray-800">Question {{ activeQuestion }} :</h2>
+								<span class="bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs font-medium">{{ question.marks }} {{ question.marks == 1 ? 'Mark' : 'Marks' }}</span>
+							</div>
+							<div class="text-sm text-gray-800 leading-relaxed mb-6" v-html="questionDetails.data.question"></div>
+							<!-- Choices -->
+							<div v-if="questionDetails.data.type === 'Choices'" class="space-y-3">
+								<template v-for="n in 4" :key="n">
+									<label v-if="questionDetails.data[`option_${n}`]" class="flex items-center gap-3 border rounded p-3 cursor-pointer transition-all" :class="selectedOptions[n-1] ? 'border-blue-500 bg-blue-50' : 'border-gray-300 hover:bg-gray-50'">
+										<input v-if="!showAnswers.length && !questionDetails.data.multiple" type="radio" :name="'q'+activeQuestion" :checked="selectedOptions[n-1]" @change="markAnswer(n)" class="w-4 h-4 accent-blue-600" />
+										<input v-else-if="!showAnswers.length && questionDetails.data.multiple" type="checkbox" :checked="selectedOptions[n-1]" @change="markAnswer(n)" class="w-4 h-4 accent-blue-600 rounded" />
+										<template v-else-if="quiz.data.show_answers">
+											<CheckCircle v-if="showAnswers[n-1] == 1" class="w-4 h-4 text-green-600 shrink-0" />
+											<MinusCircle v-else-if="showAnswers[n-1] == 2" class="w-4 h-4 text-green-600 shrink-0" />
+											<XCircle v-else-if="showAnswers[n-1] == 0" class="w-4 h-4 text-red-500 shrink-0" />
+											<MinusCircle v-else class="w-4 h-4 shrink-0" />
+										</template>
+										<span class="text-sm text-gray-800">{{ n }}.&nbsp;&nbsp;{{ questionDetails.data[`option_${n}`] }}</span>
+									</label>
+								</template>
+							</div>
+							<!-- User Input -->
+							<div v-else-if="questionDetails.data.type === 'User Input'">
+								<FormControl v-model="possibleAnswer" type="textarea" :disabled="!!showAnswers.length" class="mt-2" />
+								<div v-if="showAnswers.length" class="mt-2"><Badge v-if="showAnswers[0]" :label="__('Correct')" theme="green" /><Badge v-else theme="red" :label="__('Incorrect')" /></div>
+							</div>
+							<!-- Open Ended -->
+							<div v-else>
+								<TextEditor class="mt-4" :content="possibleAnswer" @change="(v) => (possibleAnswer = v)" :editable="true" :fixedMenu="true" editorClass="prose-sm max-w-none border-b border-x border-gray-300 bg-gray-50 rounded-b-md py-1 px-2 min-h-[7rem]" />
+							</div>
 						</div>
 					</div>
 				</div>
+				<!-- Action buttons -->
+				<div class="border-t bg-gray-50 px-6 py-3 flex-shrink-0 space-y-3">
+					<div class="flex flex-wrap gap-2">
+						<button @click="saveAndNext()" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-xs font-bold rounded uppercase">Save &amp; Next</button>
+						<button @click="clearAnswer()" class="px-4 py-2 bg-white hover:bg-gray-100 text-gray-700 text-xs font-bold border border-gray-400 rounded uppercase">Clear</button>
+						<button @click="saveAndMarkForReview()" class="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold rounded uppercase">Save &amp; Mark for Review</button>
+						<button @click="markForReviewAndNext()" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold rounded uppercase">Mark for Review &amp; Next</button>
+					</div>
+					<div class="flex items-center justify-between">
+						<div class="flex gap-2">
+							<button @click="switchQuestion(activeQuestion - 1)" :disabled="activeQuestion <= 1" class="px-3 py-1.5 border border-gray-400 text-xs font-semibold rounded hover:bg-gray-100 disabled:opacity-40">&lt;&lt; Back</button>
+							<button @click="switchQuestion(activeQuestion + 1)" :disabled="activeQuestion >= questions.length" class="px-3 py-1.5 border border-gray-400 text-xs font-semibold rounded hover:bg-gray-100 disabled:opacity-40">Next &gt;&gt;</button>
+						</div>
+						<button @click="handleSubmitClick()" class="px-5 py-2 bg-green-600 hover:bg-green-700 text-white text-xs font-bold rounded uppercase">Submit</button>
+					</div>
+				</div>
+			</div>
+
+			<!-- Right: Question palette -->
+			<div class="w-72 bg-gray-50 border-l flex flex-col overflow-hidden flex-shrink-0">
+				<!-- Legend -->
+				<div class="p-3 border-b bg-white space-y-2 flex-shrink-0">
+					<div class="grid grid-cols-2 gap-2">
+						<div class="flex items-center gap-1.5 text-xs"><span class="w-7 h-7 rounded-full bg-gray-400 text-white flex items-center justify-center font-bold text-xs shrink-0">{{ notVisitedCount }}</span><span class="text-gray-600">Not Visited</span></div>
+						<div class="flex items-center gap-1.5 text-xs"><span class="w-7 h-7 rounded-full bg-red-500 text-white flex items-center justify-center font-bold text-xs shrink-0">{{ notAnsweredCount }}</span><span class="text-gray-600">Not Answered</span></div>
+						<div class="flex items-center gap-1.5 text-xs"><span class="w-7 h-7 rounded-full bg-green-600 text-white flex items-center justify-center font-bold text-xs shrink-0">{{ answeredCount }}</span><span class="text-gray-600">Answered</span></div>
+						<div class="flex items-center gap-1.5 text-xs"><span class="w-7 h-7 rounded-full bg-purple-600 text-white flex items-center justify-center font-bold text-xs shrink-0">{{ markedOnlyCount }}</span><span class="text-gray-600">Marked for Review</span></div>
+					</div>
+					<div class="flex items-center gap-1.5 text-xs"><span class="relative w-7 h-7 rounded-full bg-purple-600 text-white flex items-center justify-center font-bold text-xs shrink-0">{{ answeredAndMarkedCount }}<span class="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 rounded-full border-2 border-white"></span></span><span class="text-gray-600 leading-tight">Answered &amp; Marked for Review</span></div>
+				</div>
+				<!-- Grid -->
+				<div class="flex-1 overflow-y-auto p-3">
+					<div class="grid grid-cols-7 gap-1.5">
+						<button v-for="(q, idx) in questions" :key="idx" @click="switchQuestion(idx + 1)" class="w-8 h-8 rounded text-xs font-bold flex items-center justify-center transition-all" :class="getQuestionBtnClass(idx + 1)">{{ String(idx + 1).padStart(2, '0') }}</button>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<!-- Result screen -->
+	<div v-else-if="quiz.data && quizSubmission.data" class="border rounded-lg p-20 text-center space-y-4">
+		<div class="text-lg font-semibold text-gray-900">{{ __('Quiz Summary') }}</div>
+		<div v-if="quizSubmission.data.is_open_ended" class="text-gray-600 leading-5">{{ __("Your submission has been saved. The instructor will review and grade it shortly.") }}</div>
+		<div v-else class="text-gray-700">{{ __('You got {0}% correct answers with a score of {1} out of {2}').format(Math.ceil(quizSubmission.data.percentage), quizSubmission.data.score, quizSubmission.data.score_out_of) }}</div>
+		<div class="flex gap-2 justify-center">
+			<Button @click="resetQuiz()" v-if="!quiz.data.max_attempts || attempts?.data.length < quiz.data.max_attempts">{{ __('Try Again') }}</Button>
+			<Button v-if="inVideo" @click="props.backToVideo()">{{ __('Resume Video') }}</Button>
+		</div>
+		<div v-if="quiz.data.show_submission_history && attempts?.data?.length > 0" class="mt-10">
+			<ListView :columns="getSubmissionColumns()" :rows="attempts?.data" row-key="name" :options="{ selectable: false, showTooltip: false }" />
+		</div>
+	</div>
+
+	<Dialog v-model="showSubmissionConfirmation" :options="{ title: __('Are you sure you want to submit the quiz?'), actions: [{ size: 'sm', label: __('Submit'), variant: 'solid', onClick() { submitQuiz(); showSubmissionConfirmation = false } }] }">
+		<template #body-content>
+			<div class="border border-gray-200 rounded-lg text-base divide-y">
+				<div class="grid grid-cols-2 divide-x"><div class="p-2">{{ __('Total Questions') }}</div><div class="p-2">{{ questions.length }}</div></div>
+				<div class="grid grid-cols-2 divide-x"><div class="p-2">{{ __('Attempted Questions') }}</div><div class="p-2">{{ attemptedQuestions.length }}</div></div>
+				<div class="grid grid-cols-2 divide-x"><div class="p-2">{{ __('Unattempted Questions') }}</div><div class="p-2">{{ questions.length - attemptedQuestions.length }}</div></div>
 			</div>
 		</template>
 	</Dialog>
@@ -972,4 +674,99 @@ const getSubmissionColumns = () => {
 		},
 	]
 }
+
+// ── NTA additions ────────────────────────────────────────────────────────────
+const visitedQuestions = ref([])
+
+watch(activeQuestion, (newVal, oldVal) => {
+	if (oldVal > 0 && !visitedQuestions.value.includes(oldVal)) {
+		visitedQuestions.value.push(oldVal)
+	}
+})
+
+const saveAndNext = () => {
+	const answers = getAnswers()
+	if (answers.length) {
+		if (!attemptedQuestions.value.includes(activeQuestion.value))
+			attemptedQuestions.value.push(activeQuestion.value)
+		addToLocalStorage()
+	}
+	if (activeQuestion.value < questions.length) {
+		activeQuestion.value++
+		selectedOptions.value.splice(0, 4, ...[0, 0, 0, 0])
+		showAnswers.length = 0
+		possibleAnswer.value = null
+	}
+}
+
+const clearAnswer = () => {
+	selectedOptions.value.splice(0, 4, ...[0, 0, 0, 0])
+	possibleAnswer.value = null
+	attemptedQuestions.value = attemptedQuestions.value.filter(q => q !== activeQuestion.value)
+	let quizData = JSON.parse(localStorage.getItem(quiz.data.title))
+	if (quizData) {
+		quizData = quizData.filter(q => q.question_name !== currentQuestion.value)
+		localStorage.setItem(quiz.data.title, JSON.stringify(quizData))
+	}
+}
+
+const saveAndMarkForReview = () => {
+	const answers = getAnswers()
+	if (answers.length) {
+		if (!attemptedQuestions.value.includes(activeQuestion.value))
+			attemptedQuestions.value.push(activeQuestion.value)
+		addToLocalStorage()
+	}
+	if (!reviewQuestions.value.includes(activeQuestion.value))
+		reviewQuestions.value.push(activeQuestion.value)
+	if (activeQuestion.value < questions.length) {
+		activeQuestion.value++
+		selectedOptions.value.splice(0, 4, ...[0, 0, 0, 0])
+		showAnswers.length = 0
+		possibleAnswer.value = null
+	}
+}
+
+const markForReviewAndNext = () => {
+	if (!reviewQuestions.value.includes(activeQuestion.value))
+		reviewQuestions.value.push(activeQuestion.value)
+	if (activeQuestion.value < questions.length) {
+		activeQuestion.value++
+		selectedOptions.value.splice(0, 4, ...[0, 0, 0, 0])
+		showAnswers.length = 0
+		possibleAnswer.value = null
+	}
+}
+
+const getQuestionBtnClass = (n) => {
+	const isActive = n === activeQuestion.value
+	const isAnswered = attemptedQuestions.value.includes(n)
+	const isMarked = reviewQuestions.value.includes(n)
+	const isVisited = visitedQuestions.value.includes(n)
+	if (isActive) return 'bg-blue-600 text-white ring-2 ring-blue-300'
+	if (isAnswered && isMarked) return 'bg-purple-600 text-white'
+	if (isMarked) return 'bg-purple-600 text-white'
+	if (isAnswered) return 'bg-green-600 text-white'
+	if (isVisited) return 'bg-red-500 text-white'
+	return 'bg-gray-300 text-gray-700'
+}
+
+const notVisitedCount = computed(() =>
+	questions.filter((_, i) => {
+		const n = i + 1
+		return n !== activeQuestion.value && !visitedQuestions.value.includes(n) && !attemptedQuestions.value.includes(n)
+	}).length
+)
+const notAnsweredCount = computed(() =>
+	visitedQuestions.value.filter(n => !attemptedQuestions.value.includes(n) && n !== activeQuestion.value).length
+)
+const answeredCount = computed(() =>
+	attemptedQuestions.value.filter(n => !reviewQuestions.value.includes(n)).length
+)
+const markedOnlyCount = computed(() =>
+	reviewQuestions.value.filter(n => !attemptedQuestions.value.includes(n)).length
+)
+const answeredAndMarkedCount = computed(() =>
+	reviewQuestions.value.filter(n => attemptedQuestions.value.includes(n)).length
+)
 </script>

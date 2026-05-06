@@ -5,10 +5,7 @@
 	>
 		<Breadcrumbs :items="breadcrumbs" />
 	</header>
-	<div
-		class="md:w-7/12 md:mx-auto mx-4 py-10"
-		:class="{ 'pt-4 md:w-full': fromLesson }"
-	>
+	<div class="h-screen overflow-hidden" :class="{ 'pt-10': !fromLesson }">
 		<Quiz :quizName="quizID" />
 	</div>
 </template>
