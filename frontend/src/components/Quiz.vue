@@ -106,12 +106,33 @@
 					</div>
 					<div class="flex items-center gap-1.5 text-xs"><span class="relative w-7 h-7 rounded-full bg-purple-600 text-white flex items-center justify-center font-bold text-xs shrink-0">{{ answeredAndMarkedCount }}<span class="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 rounded-full border-2 border-white"></span></span><span class="text-gray-600 leading-tight">Answered &amp; Marked for Review</span></div>
 				</div>
-				<!-- Grid -->
-				<div class="flex-1 overflow-y-auto p-3">
-					<div class="grid grid-cols-7 gap-1.5">
-						<button v-for="(q, idx) in questions" :key="idx" @click="switchQuestion(idx + 1)" class="w-8 h-8 rounded text-xs font-bold flex items-center justify-center transition-all" :class="getQuestionBtnClass(idx + 1)">{{ String(idx + 1).padStart(2, '0') }}</button>
-					</div>
+				<!-- Module tabs -->
+			<div v-if="quizModules.length > 1" class="flex flex-wrap gap-1 px-3 pt-2 pb-1 border-b">
+				<button
+					v-for="mod in ['All', ...quizModules]"
+					:key="mod"
+					@click="activeModule = mod"
+					class="px-2 py-0.5 rounded-full text-xs font-medium transition-colors"
+					:class="activeModule === mod
+						? 'bg-blue-600 text-white'
+						: 'bg-gray-100 text-gray-600 hover:bg-gray-200'"
+				>
+					{{ mod }}
+					<span class="ml-1 opacity-70" v-if="mod !== 'All'">({{ moduleQuestionCount(mod) }})</span>
+				</button>
+			</div>
+			<!-- Grid -->
+			<div class="flex-1 overflow-y-auto p-3">
+				<div class="grid grid-cols-7 gap-1.5">
+					<button
+						v-for="(q, idx) in filteredPaletteQuestions"
+						:key="idx"
+						@click="switchQuestion(q._globalIdx + 1)"
+						class="w-8 h-8 rounded text-xs font-bold flex items-center justify-center transition-all"
+						:class="getQuestionBtnClass(q._globalIdx + 1)"
+					>{{ String(q._globalIdx + 1).padStart(2, '0') }}</button>
 				</div>
+			</div>
 			</div>
 		</div>
 	</div>
@@ -769,4 +790,22 @@ const markedOnlyCount = computed(() =>
 const answeredAndMarkedCount = computed(() =>
 	reviewQuestions.value.filter(n => attemptedQuestions.value.includes(n)).length
 )
+
+// ── Module tabs ───────────────────────────────────────────────────────────────
+const activeModule = ref('All')
+
+const quizModules = computed(() => {
+	const mods = new Set()
+	questions.forEach(q => { if (q.module) mods.add(q.module) })
+	return [...mods]
+})
+
+const filteredPaletteQuestions = computed(() => {
+	return questions
+		.map((q, idx) => ({ ...q, _globalIdx: idx }))
+		.filter(q => activeModule.value === 'All' || q.module === activeModule.value)
+})
+
+const moduleQuestionCount = (mod) => questions.filter(q => q.module === mod).length
 </script>
+

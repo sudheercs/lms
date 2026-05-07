@@ -2404,6 +2404,26 @@ def import_course_from_zip(zip_file_path: str):
 	return import_course_zip(zip_file_path)
 
 
+@frappe.whitelist(allow_guest=False)
+def get_published_quizzes():
+	"""Return all published quizzes for the public Tests page."""
+	quizzes = frappe.get_all(
+		"LMS Quiz",
+		filters={"published": 1},
+		fields=["name", "title", "total_marks", "passing_percentage", "max_attempts", "duration", "is_standalone"],
+		order_by="modified desc",
+	)
+	for quiz in quizzes:
+		quiz["question_count"] = frappe.db.count("LMS Quiz Question", {"parent": quiz["name"]})
+		modules = frappe.db.sql(
+			"SELECT DISTINCT module FROM `tabLMS Quiz Question` WHERE parent=%s AND module IS NOT NULL AND module != ''",
+			quiz["name"],
+			as_list=True,
+		)
+		quiz["modules"] = [m[0] for m in modules]
+	return quizzes
+
+
 @frappe.whitelist()
 def bulk_upload_quiz_questions(quiz: str, filedata: str):
 	"""Bulk upload MCQ questions to a quiz from a CSV payload.
