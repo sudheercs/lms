@@ -543,6 +543,15 @@ const getSidebarItems = (forMobile = false) => {
 					],
 				},
 				{
+					label: 'Tests',
+					icon: 'ClipboardList',
+					to: 'PublicQuizzes',
+					condition: () => {
+						return !forMobile && userResource?.data
+					},
+					activeFor: ['PublicQuizzes', 'QuizPage'],
+				},
+				{
 					label: 'Assignments',
 					icon: 'Pencil',
 					to: 'Assignments',
