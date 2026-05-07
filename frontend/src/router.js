@@ -157,6 +157,11 @@ const routes = [
 		props: true,
 	},
 	{
+		path: '/tests',
+		name: 'PublicQuizzes',
+		component: () => import('@/pages/PublicQuizzes.vue'),
+	},
+	{
 		path: '/quiz-submissions/:quizID',
 		name: 'QuizSubmissionList',
 		component: () => import('@/pages/QuizSubmissionList.vue'),

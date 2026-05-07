@@ -130,6 +130,20 @@
 						:label="__('Marks to Deduct')"
 					/>
 				</div>
+				<div class="flex flex-col space-y-5">
+					<Switch
+						v-model="quizDetails.doc.published"
+						size="sm"
+						:label="__('Published')"
+						:description="__('Show this quiz on the public Tests page.')"
+					/>
+					<Switch
+						v-model="quizDetails.doc.is_standalone"
+						size="sm"
+						:label="__('Standalone Quiz')"
+						:description="__('Any logged-in user can take this quiz without course enrollment.')"
+					/>
+				</div>
 			</div>
 		</div>
 
@@ -260,7 +274,9 @@ const currentQuestion = reactive({
 	question: '',
 	marks: 0,
 	name: '',
+	module: '',
 })
+
 const user = inject('$user')
 const router = useRouter()
 const readOnlyMode = window.read_only_mode
@@ -345,12 +361,17 @@ const questionColumns = computed(() => {
 		{
 			label: __('ID'),
 			key: 'question',
-			width: '10rem',
+			width: '8rem',
 		},
 		{
 			label: __('Question'),
 			key: __('question_detail'),
-			width: '40rem',
+			width: '30rem',
+		},
+		{
+			label: __('Module'),
+			key: 'module',
+			width: '8rem',
 		},
 		{
 			label: __('Marks'),
@@ -365,10 +386,12 @@ const openQuestionModal = (question = null) => {
 		currentQuestion.question = question.question
 		currentQuestion.marks = question.marks
 		currentQuestion.name = question.name
+		currentQuestion.module = question.module || ''
 	} else {
 		currentQuestion.question = ''
 		currentQuestion.marks = 0
 		currentQuestion.name = ''
+		currentQuestion.module = ''
 	}
 	showQuestionModal.value = true
 }
